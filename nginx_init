@@ -1,0 +1,114 @@
+#!/usr/bin/env ruby
+
+PATH="/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin"
+DESC="nginx daemon"
+NAME="nginx"
+DAEMON="/usr/local/sbin/#{NAME}"
+CONFIGFILE="/etc/nginx/nginx.conf"
+PIDFILE="/var/run/#{NAME}.pid"
+SCRIPTNAME="/etc/init.d/#{NAME}"
+
+ENV["PATH"] = PATH
+
+begin
+  @pid = File.read(PIDFILE).to_i
+  @pid = nil if @pid == 0
+rescue
+  @pid = nil
+end
+
+def running?
+  @pid && kill(0)
+end
+
+def dead?
+  @pid && !kill(0)
+end
+
+def start
+  if running?
+    puts "already running (#{@pid})"
+    exit
+  end
+
+  if dead?
+    clean_pid
+  end
+
+  puts "starting #{NAME}"
+  system("#{DAEMON} -c #{CONFIGFILE}")
+end
+
+def stop
+  if not running?
+    puts "not running"
+    exit
+  end
+
+  pgid = Process.getpgid(@pid)
+  puts "stopping #{NAME}"
+  Process.kill('-TERM', pgid)
+end
+
+def restart
+  valid = system("#{DAEMON} -c #{CONFIGFILE} -t")
+  if valid
+    reload
+    puts "if you meant to stop and start, do so manually"
+  else
+    puts "#{NAME} config file test failed"
+  end
+end
+
+def reload
+  if not running?
+    puts "not running"
+    exit
+  end
+
+  puts "reloading #{NAME} configuration"
+  kill("-HUP")
+end
+
+def clean_pid
+  File.delete(PIDFILE)
+end
+
+def kill(code)
+  Process.kill(code, @pid)
+  true
+rescue
+  false
+end
+
+case ARGV[0]
+when 'start'
+  start
+  exit
+when 'stop'
+  stop
+  exit
+when 'restart'
+  if not running?
+    start
+  else
+    restart
+  end
+  exit
+when 'reload'
+  reload
+  exit
+when 'status'
+  if running?
+    puts "running (#{@pid})"
+    exit
+  elsif dead?
+    puts "dead (#{@pid})"
+    exit!(1)
+  else
+    puts "not running"
+    exit!(3)
+  end
+else
+  puts "Usage: #{SCRIPTNAME} start|stop|restart|reload|status"
+end
